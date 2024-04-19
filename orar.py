@@ -40,7 +40,7 @@ class State:
     def is_soft_constraint(self, prof_name: str, interval: Tuple[int, int], day: str) -> int:
         # print prof_name
         print('prof_name', prof_name)
-        constraints_list = self.info_teacher_subjects[prof_name][1]
+        constraints_list = self.info_teacher_constraints[prof_name]
         constraints_count = 0
         not_day = '!' + day
         
@@ -64,8 +64,8 @@ class State:
         '''
         Întoarce True dacă este stare finală.
         '''
-        for _, unallocated_students in self.remained_subjects:
-            if unallocated_students > 0:
+        for _, unallocated_students in self.remained_subjects.items():
+            if int(unallocated_students) > 0:
                 return False
         
         return True
@@ -77,15 +77,17 @@ class State:
         '''
         next_states = []
 
-        for subject, unallocated_students in self.remained_subjects:
+        for subject, unallocated_students in self.remained_subjects.items():
+            print('subject', subject)
+            print('unallocated_students', unallocated_students)
             # if i have any students left without the course
             if int(unallocated_students) > 0:
                 # search for an available teacher
-                for teacher_name, left_intervals in self.remained_profs_intervals:
+                for teacher_name, left_intervals in self.remained_profs_intervals.items():
                     teacher_subjects_list = self.info_teacher_subjects[teacher_name]
                     if left_intervals and subject in teacher_subjects_list:
                         # search for an available classroom
-                        for classroom, (classroom_subjects_list, classroom_capacity) in self.info_rooms:
+                        for classroom, (classroom_capacity, classroom_subjects_list) in self.info_rooms.items():
                             # classroom_subjects_list = self.info_rooms[classroom][1]
                             # classroom_capacity = self.info_rooms[classroom][0]
                             if subject in classroom_subjects_list:
@@ -104,12 +106,24 @@ class State:
                                                 new_state.timetable[day][interval][classroom] = (teacher_name, subject)
                                                 new_state.remained_profs_intervals[teacher_name] -= 1
                                                 new_state.remained_subjects[subject] -= classroom_capacity
+                                                if new_state.remained_subjects[subject] < 0:
+                                                    new_state.remained_subjects[subject] = 0
                                                 new_state.conflicts += self.is_soft_constraint(teacher_name, interval, day)
                                                 next_states.append(new_state)
 
         return next_states
 
-    
+
+def eval_function(state: State) -> int:
+    total_cost = 0
+    remained_subjects = state.remained_subjects
+    for _, left_students_count in remained_subjects.items():
+        if left_students_count != 0:
+            total_cost += left_students_count * 100
+
+    total_cost += state.conflicts
+
+    return total_cost
 def stochastic_hill_climbing(initial: State, max_iters: int = 1000):
     iters, states = 0, 0
     state = initial
@@ -120,7 +134,7 @@ def stochastic_hill_climbing(initial: State, max_iters: int = 1000):
         # TODO 3. Alegem aleator între vecinii mai buni decât starea curentă.
         # Folosiți radnom.choice(lista)
         # Nu uitați să adunați numărul de stări construite.
-        current_state_score = state.conflicts
+        current_state_score = eval_function(state)
         possible_states = state.get_next_states()
         print(possible_states)
         found_local_min = True
@@ -129,16 +143,16 @@ def stochastic_hill_climbing(initial: State, max_iters: int = 1000):
 
         for possible_state in possible_states:
             states += 1
-            possible_state_score = possible_state.conflicts
+            possible_state_score = eval_function(possible_state)
             if possible_state_score < current_state_score:
                 found_local_min = False
                 better_states.append(possible_state)
 
         if not found_local_min:
             state = random.choice(better_states)
-            current_state_score = state.conflicts
 
         if found_local_min:
+            print("Found local min")
             return state.is_final(), iters, states, state
 
     return state.is_final(), iters, states, state
@@ -169,13 +183,15 @@ def create_input_structures(input_data):
 def main():
     # ceva
     # Check if correct number of command-line arguments are provided
-    if len(sys.argv) != 3:
+    # TODO MODIFY THIS 4 TO 3 WHEN RUNNING ON OTHER THAN PYCHARM
+    # TODO AND THE SYS.ARGV[3]...
+    if len(sys.argv) != 4:
         print("Usage: python program.py <algorithm> <input_file>")
         return
 
     # Extract algorithm and input file from command-line arguments
-    algorithm = sys.argv[1]
-    input_file = './inputs/' + sys.argv[2]
+    algorithm = sys.argv[2]
+    input_file = "C:\\Users\\alexa\\PycharmProjects\\temaIA_V2\\tema1_v2.\\inputs\\" + sys.argv[3]
 
     # Read input file
     input_data = read_yaml_file(input_file)
@@ -197,8 +213,9 @@ def main():
 
     if algorithm == 'hc':
         # TODO ADD DAYS TO THE TIMETABLE
-        print(stochastic_hill_climbing(initial_state, 1000))
-        print('Got timetable' + str(initial_state.timetable))
+        _, _, _, state = stochastic_hill_climbing(initial_state, 1000)
+        print('Conflicte soft: ', state.conflicts)
+        print(state.timetable)
 
 
 if __name__ == '__main__':
