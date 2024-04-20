@@ -137,13 +137,15 @@ class State:
                         # search for an available teacher
                         for teacher_name, left_intervals in new_state.remained_profs_intervals.items():
                             teacher_subjects_list = new_state.info_teacher_subjects[teacher_name]
-                            if left_intervals and subject in teacher_subjects_list and teacher_name not in teacher_interval:
-                                teacher_interval.append(teacher_name)
+                            # if left_intervals and subject in teacher_subjects_list and teacher_name not in teacher_interval:
+                            #     teacher_interval.append(teacher_name)
                                 # search for an available classroom
-                                for classroom_name, (classroom_capacity, classroom_subjects_list) in new_state.info_rooms.items():
-                                    # classroom_subjects_list = self.info_rooms[classroom][1]
-                                    # classroom_capacity = self.info_rooms[classroom][0]
+                            for classroom_name, (classroom_capacity, classroom_subjects_list) in new_state.info_rooms.items():
+                                # classroom_subjects_list = self.info_rooms[classroom][1]
+                                # classroom_capacity = self.info_rooms[classroom][0]
+                                if left_intervals and subject in teacher_subjects_list and teacher_name not in teacher_interval:
                                     if subject in classroom_subjects_list and classroom_name not in occupied_classrooms:
+                                        teacher_interval.append(teacher_name)
                                         occupied_classrooms[classroom_name] = (teacher_name, subject)
                                         # update the new state
                                         new_state.remained_profs_intervals[teacher_name] -= 1
@@ -165,7 +167,7 @@ def eval_function(state: State) -> int:
         if left_students_count != 0:
             total_cost += left_students_count * 100
     # TODO DEOCAMDATA IGNOR ASTEA SOFT MUST FIX IS_SOFT AIA
-    total_cost += state.conflicts
+    #total_cost += state.conflicts
 
     return total_cost
 def stochastic_hill_climbing(initial: State, max_iters: int = 1000):
@@ -294,6 +296,8 @@ def main():
         constrangeri_optionale = check_optional_constraints(convert_string_to_int_tuple(state.timetable), input_data)
 
         print(f'\n=>\nS-au încălcat {constrangeri_optionale} constrângeri optionale!\n')
+        if not state.is_final():
+            print(state.remained_subjects)
 
 
 if __name__ == '__main__':
