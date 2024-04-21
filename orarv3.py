@@ -1,0 +1,213 @@
+from typing import Dict, Tuple, List
+import copy
+import random
+import sys
+from utils import read_yaml_file, pretty_print_timetable
+from check_constraints import *
+
+MAX_TEACHER_INTERVALS = 7
+
+INTERVALS = None
+DAYS = None
+SUBJECTS = None
+TEACHERS = None
+ROOMS = None
+
+class State:
+    def __init__(
+            self,
+            timetable: Dict[str, Dict[Tuple[int, int], Dict[str, Tuple[str, str]]]] = {},
+            remained_profs_intervals: Dict[str, int] = {},
+            remained_subjects: Dict[str, int] = {},
+            teacher_rooms_day_intervals: Dict[str, Dict[Tuple[int, int], List[str]]] = {},
+            conflicts: int = 0,
+            seed: int = 42
+    ) -> None:
+        self.timetable = timetable
+        self.remained_profs_intervals = remained_profs_intervals
+        self.remained_subjects = remained_subjects
+        self.conflicts = conflicts
+        self.teacher_rooms_day_intervals = teacher_rooms_day_intervals
+        self.seed = seed
+
+    def is_final(self) -> bool:
+        '''
+        Întoarce True dacă este stare finală.
+        '''
+        for _, unallocated_students in self.remained_subjects.items():
+            if int(unallocated_students) > 0:
+                return False
+
+        return True
+
+    # trb sa pun LIST[State]
+    def get_next_states(self):
+        '''
+        Întoarce un generator cu toate posibilele stări următoare.
+        '''
+        next_states = []
+
+        for day in DAYS:
+            for interval in INTERVALS:
+                for room_name, room_details in ROOMS.items():
+                    if self.timetable[day][interval][room_name] == None and room_name not in self.teacher_rooms_day_intervals[day][interval]:
+                        for subject in room_details["Materii"]:
+                            for teacher_name, teacher_details in TEACHERS.items():
+                                if subject in teacher_details["Materii"] and self.remained_profs_intervals[teacher_name] > 0:
+                                    if teacher_name not in self.teacher_rooms_day_intervals[day][interval]:
+                                        new_state = copy.deepcopy(self)
+                                        # print all combinations of subject, teacher, room
+                                        # print(day, interval, subject, teacher_name, room_name)
+                                        # generate the new state
+                                        new_state.timetable[day][interval][room_name] = (teacher_name, subject)
+                                        new_state.remained_profs_intervals[teacher_name] -= 1
+                                        new_state.remained_subjects[subject] -= room_details["Capacitate"]
+                                        if new_state.remained_subjects[subject] < 0:
+                                            new_state.remained_subjects[subject] = 0
+                                        new_state.teacher_rooms_day_intervals[day][interval].append(teacher_name)
+                                        new_state.teacher_rooms_day_intervals[day][interval].append(room_name)
+                                        next_states.append(new_state)
+        return next_states
+
+
+def eval_function(state: State) -> int:
+    total_cost = 0
+    remained_subjects = state.remained_subjects
+    # for _, students_count in initial_subjects_stud_count.items():
+    for _, left_students_count in remained_subjects.items():
+        if left_students_count != 0:
+            total_cost += left_students_count * 100
+    # TODO DEOCAMDATA IGNOR ASTEA SOFT MUST FIX IS_SOFT AIA
+    # total_cost += state.conflicts
+
+    return total_cost
+
+
+def stochastic_hill_climbing(initial: State, max_iters: int = 1000):
+    iters, states = 0, 0
+    state = initial
+
+    while iters < max_iters:
+        iters += 1
+        print('iters', iters)
+        # TODO 3. Alegem aleator între vecinii mai buni decât starea curentă.
+        # Folosiți radnom.choice(lista)
+        # Nu uitați să adunați numărul de stări construite.
+        current_state_score = eval_function(state)
+        possible_states = state.get_next_states()
+        print(possible_states)
+        found_local_min = True
+
+        better_states = []
+
+        for possible_state in possible_states:
+            states += 1
+            possible_state_score = eval_function(possible_state)
+            if possible_state_score < current_state_score:
+                found_local_min = False
+                better_states.append(possible_state)
+
+        if not found_local_min:
+            state = random.choice(better_states)
+
+        if found_local_min:
+            print(str(state.is_final()) + " Found local min with score: " + str(eval_function(state)))
+            return state.is_final(), iters, states, state
+
+    return state.is_final(), iters, states, state
+
+
+# sa merg doar pe conflicte soft poate merge ala mediu
+# def stochastic_hill_climbing(initial: State, max_iters: int = 10000):
+#     iters, states = 0, 0
+#     best_state = initial
+#
+#     while iters < max_iters:
+#         iters += 1
+#         print('iters', iters)
+#         better_states = best_state.get_next_states()
+#         if better_states:
+#             best_state = random.choice(better_states)
+#         else:
+#             return best_state.is_final(), iters, states, best_state
+#
+#     return best_state.is_final(), iters, states, best_state
+
+def process_input_data(input_data):
+    global INTERVALS, SUBJECTS, TEACHERS, ROOMS, DAYS
+    # POATE UN TRY CATCH FRUMOS
+    INTERVALS = input_data['Intervale']
+    SUBJECTS = input_data['Materii']
+    TEACHERS = input_data['Profesori']
+    ROOMS = input_data['Sali']
+    DAYS = input_data['Zile']
+
+def initialise_timetable_empty() -> Dict[str, Dict[Tuple[int, int], Dict[str, Tuple[str, str]]]]:
+    timetable = {}
+    for day in DAYS:
+        timetable[day] = {}
+        for interval in INTERVALS:
+            timetable[day][interval] = {}
+            for room in ROOMS:
+                timetable[day][interval][room] = None
+
+    return timetable
+
+def convert_string_to_int_tuple(timetable: Dict[str, Dict[str, Dict[str, Tuple[str, str]]]]) -> Dict[
+    str, Dict[Tuple[int, int], Dict[str, Tuple[str, str]]]]:
+    new_timetable = {}
+    for day, intervals in timetable.items():
+        new_intervals = {}
+        for interval_str, courses in intervals.items():
+            start, end = map(int, interval_str.strip('()').split(','))
+            new_intervals[(start, end)] = courses
+        new_timetable[day] = new_intervals
+    return new_timetable
+def main():
+    # ceva
+    # Check if correct number of command-line arguments are provided
+    # TODO MODIFY THIS 4 TO 3 WHEN RUNNING ON OTHER THAN PYCHARM
+    # TODO AND THE SYS.ARGV[3]...
+    if len(sys.argv) != 4:
+        print("Usage: python program.py <algorithm> <input_file>")
+        return
+
+    # Extract algorithm and input file from command-line arguments
+    algorithm = sys.argv[2]
+    input_file = "C:\\Users\\alexa\\PycharmProjects\\temaIA_V2\\tema1_v2.\\inputs\\" + sys.argv[3]
+
+    # Read input file
+    input_data = read_yaml_file(input_file)
+    process_input_data(input_data)
+    # Create initial state
+    initial_state = State(
+        # TODO MUST SET INITIAL TIMETABLE EMPTY
+        timetable = initialise_timetable_empty(),
+        remained_profs_intervals = {teacher: MAX_TEACHER_INTERVALS for teacher in TEACHERS},
+        remained_subjects = {subject: SUBJECTS[subject] for subject in SUBJECTS},
+        teacher_rooms_day_intervals = {day: {interval: [] for interval in INTERVALS} for day in DAYS},
+        conflicts = 0,
+        seed = 42
+    )
+
+    if algorithm == 'hc':
+        # TODO ADD DAYS TO THE TIMETABLE
+        _, _, _, state = stochastic_hill_climbing(initial_state, 10000)
+        print('Conflicte soft: ', state.conflicts)
+        print(state.timetable)
+        print(pretty_print_timetable(convert_string_to_int_tuple(state.timetable), input_file))
+
+        print('\n----------- Constrângeri obligatorii -----------')
+        constrangeri_incalcate = check_mandatory_constraints(convert_string_to_int_tuple(state.timetable), input_data)
+
+        print(f'\n=>\nS-au încălcat {constrangeri_incalcate} constrângeri obligatorii!')
+
+        print('\n----------- Constrângeri optionale -----------')
+        constrangeri_optionale = check_optional_constraints(convert_string_to_int_tuple(state.timetable), input_data)
+
+        print(f'\n=>\nS-au încălcat {constrangeri_optionale} constrângeri optionale!\n')
+        if not state.is_final():
+            print(state.remained_subjects)
+        print("conflicts: " + str(state.conflicts))
+if __name__ == '__main__':
+    main()
