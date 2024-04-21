@@ -80,7 +80,7 @@ def eval_function(state: State) -> int:
         if left_students_count != 0:
             total_cost += left_students_count
 
-    total_cost += state.conflicts * 15
+    total_cost += state.conflicts * 10
 
     return total_cost
 
@@ -117,6 +117,70 @@ def stochastic_hill_climbing(initial: State, max_iters: int = 1000):
             return state.is_final(), iters, states, state
 
     return state.is_final(), iters, states, state
+
+def steepest_ascent_HC(initial: State, max_iters: int = 1000):
+    iters, states = 0, 0
+    state = initial
+
+    while iters < max_iters:
+        iters += 1
+        print('iters', iters)
+        better_exists = False
+        successors = state.get_next_states()
+        current_state_score = eval_function(state)
+
+        for possible_state in successors:
+            possible_state_score = eval_function(possible_state)
+            if possible_state_score < current_state_score:
+                better_exists = True
+                state = possible_state
+                current_state_score = possible_state_score
+
+        if not better_exists:
+            return state.is_final(), iters, states, state
+
+    return state.is_final(), iters, states, state
+
+def random_restart_HC(initial: State, max_restarts: int = 100):
+    total_iters, total_states = 0, 0
+    succesors_list = initial.get_next_states()
+
+    state = random.choice(succesors_list)
+
+    for i in range(0, max_restarts):
+        state_is_final, iters, states, final_state = stochastic_hill_climbing(state, 100)
+        total_iters += iters + 1
+        total_states += states
+
+        if state_is_final:
+            return state_is_final, total_iters, total_states, final_state
+        else:
+            print("Random choosing a succesor")
+            state = random.choice(succesors_list)
+
+    return False, total_iters, total_states, state
+
+def my_HC(initial: State, max_iters: int = 100, max_tries: int = 20):
+    total_iters, total_states = 0, 0
+
+    state_is_final, iters, states, state = steepest_ascent_HC(initial, max_iters)
+
+    total_states += states
+    total_iters += iters
+
+    if not state_is_final:
+        print("Steepest failed! Trying stochastic...")
+        for i in range(0, max_tries):
+            total_iters += 1
+            state_is_final, iters, states, state = stochastic_hill_climbing(initial, max_iters)
+            total_iters += iters
+            total_states += states
+
+            if state_is_final:
+                return state_is_final, total_iters, total_states, state
+    # it failed, return all the details anyway
+    return state_is_final, total_iters, total_states, state
+
 
 
 # sa merg doar pe conflicte soft poate merge ala mediu
@@ -249,7 +313,11 @@ def main():
 
     if algorithm == 'hc':
         # TODO ADD DAYS TO THE TIMETABLE
-        _, _, _, state = stochastic_hill_climbing(initial_state, 10000)
+        # _, _, _, state = stochastic_hill_climbing(initial_state, 100)
+        # _, _, _, state = steepest_ascent_HC(initial_state, 10000)
+        # _, _, _, state = random_restart_HC(initial_state, 100)
+        _, _, _, state = my_HC(initial_state, 100, 20)
+
         print('Conflicte soft: ', state.conflicts)
         print(state.timetable)
         print(pretty_print_timetable(convert_string_to_int_tuple(state.timetable), input_file))
