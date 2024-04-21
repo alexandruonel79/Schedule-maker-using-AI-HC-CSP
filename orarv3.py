@@ -52,21 +52,23 @@ class State:
                 for room_name, room_details in ROOMS.items():
                     if self.timetable[day][interval][room_name] == None and room_name not in self.teacher_rooms_day_intervals[day][interval]:
                         for subject in room_details["Materii"]:
-                            for teacher_name, teacher_details in TEACHERS.items():
-                                if subject in teacher_details["Materii"] and self.remained_profs_intervals[teacher_name] > 0:
-                                    if teacher_name not in self.teacher_rooms_day_intervals[day][interval]:
-                                        new_state = copy.deepcopy(self)
-                                        # print all combinations of subject, teacher, room
-                                        # print(day, interval, subject, teacher_name, room_name)
-                                        # generate the new state
-                                        new_state.timetable[day][interval][room_name] = (teacher_name, subject)
-                                        new_state.remained_profs_intervals[teacher_name] -= 1
-                                        new_state.remained_subjects[subject] -= room_details["Capacitate"]
-                                        if new_state.remained_subjects[subject] < 0:
-                                            new_state.remained_subjects[subject] = 0
-                                        new_state.teacher_rooms_day_intervals[day][interval].append(teacher_name)
-                                        new_state.teacher_rooms_day_intervals[day][interval].append(room_name)
-                                        next_states.append(new_state)
+                            if self.remained_subjects[subject] > 0:
+                                for teacher_name, teacher_details in TEACHERS.items():
+                                    if subject in teacher_details["Materii"] and self.remained_profs_intervals[teacher_name] > 0:
+                                        if teacher_name not in self.teacher_rooms_day_intervals[day][interval]:
+                                            new_state = copy.deepcopy(self)
+                                            # print all combinations of subject, teacher, room
+                                            # print(day, interval, subject, teacher_name, room_name)
+                                            # generate the new state
+                                            new_state.timetable[day][interval][room_name] = (teacher_name, subject)
+                                            new_state.conflicts += is_soft_constraint(day, interval, teacher_name)
+                                            new_state.remained_profs_intervals[teacher_name] -= 1
+                                            new_state.remained_subjects[subject] -= room_details["Capacitate"]
+                                            if new_state.remained_subjects[subject] < 0:
+                                                new_state.remained_subjects[subject] = 0
+                                            new_state.teacher_rooms_day_intervals[day][interval].append(teacher_name)
+                                            new_state.teacher_rooms_day_intervals[day][interval].append(room_name)
+                                            next_states.append(new_state)
         return next_states
 
 
@@ -78,7 +80,7 @@ def eval_function(state: State) -> int:
         if left_students_count != 0:
             total_cost += left_students_count * 100
     # TODO DEOCAMDATA IGNOR ASTEA SOFT MUST FIX IS_SOFT AIA
-    # total_cost += state.conflicts
+    total_cost += state.conflicts
 
     return total_cost
 
@@ -95,7 +97,7 @@ def stochastic_hill_climbing(initial: State, max_iters: int = 1000):
         # Nu uitați să adunați numărul de stări construite.
         current_state_score = eval_function(state)
         possible_states = state.get_next_states()
-        print(possible_states)
+        #print(possible_states)
         found_local_min = True
 
         better_states = []
@@ -163,6 +165,62 @@ def convert_string_to_int_tuple(timetable: Dict[str, Dict[str, Dict[str, Tuple[s
             new_intervals[(start, end)] = courses
         new_timetable[day] = new_intervals
     return new_timetable
+
+def contains_number(string):
+    return any(char.isdigit() for char in string)
+def get_explicit_constraints(constraints: []):
+    modified_constraints = []
+    for constraint in constraints:
+        print(type(constraint))
+        if contains_number(constraint):
+            contains_exclamation = False
+            constraint = constraint.replace(", ", "-").replace("(", "").replace(")", "")
+            # now its like !10-14
+            if constraint[0] == '!':
+                contains_exclamation = True
+                constraint = constraint.replace("!", "")
+                # now its like 10-14
+            small = int(constraint.split("-")[0])
+            big = int(constraint.split("-")[1])
+
+            if big - small > 2:
+                while small < big:
+                    if contains_exclamation:
+                        modified_constraints.append("!" + str(small) + "-" + str(small + 2))
+                    else:
+                        modified_constraints.append(str(small) + "-" + str(small + 2))
+                    small += 2
+            else:
+                if contains_exclamation:
+                    constraint = "!" + constraint
+                modified_constraints.append(constraint)
+        else:
+            modified_constraints.append(constraint)
+
+    return modified_constraints
+
+def is_soft_constraint(day: str, interval: str, teacher_name: str):
+    total_cost = 0
+
+    teacher_constraints = get_explicit_constraints(TEACHERS[teacher_name]["Constrangeri"])
+    not_day = '!' + day
+    interval = interval.replace(", ", "-").replace("(", "").replace(")", "")
+    # interval = str(interval[0]) + '-' + str(interval[1])
+    not_interval = '!' + interval
+
+    if not_day in teacher_constraints:
+        total_cost += 1
+    elif day not in teacher_constraints:
+        total_cost += 1
+
+    if not_interval in teacher_constraints:
+        total_cost += 1
+    elif interval not in teacher_constraints:
+        total_cost += 1
+
+    return total_cost
+
+
 def main():
     # ceva
     # Check if correct number of command-line arguments are provided
