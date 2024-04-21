@@ -78,9 +78,9 @@ def eval_function(state: State) -> int:
     # for _, students_count in initial_subjects_stud_count.items():
     for _, left_students_count in remained_subjects.items():
         if left_students_count != 0:
-            total_cost += left_students_count * 100
-    # TODO DEOCAMDATA IGNOR ASTEA SOFT MUST FIX IS_SOFT AIA
-    total_cost += state.conflicts
+            total_cost += left_students_count
+
+    total_cost += state.conflicts * 15
 
     return total_cost
 
@@ -171,7 +171,6 @@ def contains_number(string):
 def get_explicit_constraints(constraints: []):
     modified_constraints = []
     for constraint in constraints:
-        print(type(constraint))
         if contains_number(constraint):
             contains_exclamation = False
             constraint = constraint.replace(", ", "-").replace("(", "").replace(")", "")
